@@ -1,0 +1,7 @@
+{
+  "name": "lowladb-benchmark-client",
+  "dependencies": {
+    "jquery": "~2.1.0",
+    "lowladb": "~0.0.1"
+  }
+}

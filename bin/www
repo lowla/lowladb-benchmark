@@ -1,0 +1,51 @@
+#!/usr/bin/env node
+var debug = require('debug')('lowladb-benchmark');
+var app = require('../app');
+
+var mongoClient = require('mongodb').MongoClient;
+var mongoDb;
+
+var createNoBinData = function(coll) {
+  var syncNotifier = app.get('lowlaConfig').syncNotifier;
+  var syncPayload = {modified: [], deleted: []};
+  for (i = 0 ; i < 10000 ; ++i) {
+    var doc = {};
+    doc._id = i.toString();
+    doc.field1 = "I am 23 characters long";
+    doc.field2 = "I am 23 characters long";
+    doc.field3 = "I am 23 characters long";
+    doc.field4 = "I am 23 characters long";
+    coll.insert(doc, function(err, result) {});
+    syncPayload.modified.push({
+      id : "lowladb.no_bin_data$" + doc._id,
+      version : "1",
+      clientNs : "lowladb.no_bin_data"
+    });
+  }
+  syncNotifier(syncPayload);
+}
+
+mongoClient.connect('mongodb://127.0.0.1/lowladb', function(err, db) {
+    if (err) {
+      debug(err);
+      process.exit(1);
+    }
+    mongoDb = db;
+    var coll = db.collection('no_bin_data');
+    coll.count(function(err, count) {
+      if (count && 0 != count && 10000 != count) {
+        coll.remove(function(err, docs) {
+          createNoBinData(coll);
+        });
+      }
+      else if (10000 != count) {
+         createNoBinData(coll);
+      }
+    });
+});
+
+app.set('port', process.env.PORT || 3000);
+
+var server = app.listen(app.get('port'), function() {
+  debug('Express server listening on port ' + server.address().port);
+});
