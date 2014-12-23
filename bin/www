@@ -1,16 +1,26 @@
 #!/usr/bin/env node
 var debug = require('debug')('lowladb-benchmark');
-var app = require('../app');
+var app_no_bin_data = require('../app').create({atomCollection: 'lowlaAtom_no_bin_data'});
+var app_bin_thumb = require('../app').create({atomCollection: 'lowlaAtom_bin_thumb'});
+var app_bin_1mb = require('../app').create({atomCollection: 'lowlaAtom_bin_1mb'});
+
+var dump = require('../dump.js');
+
+var fs = require('fs');
+if (!fs.existsSync('client/data')) {
+  fs.mkdirSync('client/data');
+}
 
 var mongoClient = require('mongodb').MongoClient;
 var mongoDb;
 
 var createNoBinData = function(coll) {
-  var syncNotifier = app.get('lowlaConfig').syncNotifier;
+  var syncNotifier = app_no_bin_data.get('lowlaConfig').syncNotifier;
   var syncPayload = {modified: [], deleted: []};
   for (i = 0 ; i < 10000 ; ++i) {
     var doc = {};
     doc._id = i.toString();
+    doc.id = i.toString();
     doc.field1 = "I am 23 characters long";
     doc.field2 = "I am 23 characters long";
     doc.field3 = "I am 23 characters long";
@@ -25,27 +35,116 @@ var createNoBinData = function(coll) {
   syncNotifier(syncPayload);
 }
 
+var createBinThumb = function(coll) {
+  var fs = require('fs');
+  
+  var syncNotifier = app_bin_thumb.get('lowlaConfig').syncNotifier;
+  var syncPayload = {modified: [], deleted: []};
+  var buffer = fs.readFileSync('thumb.png');
+  
+  for (i = 0 ; i < 1000 ; ++i) {
+    var doc = {};
+    doc._id = i.toString();
+    doc.id = i.toString();
+    doc.field1 = "I am 23 characters long";
+    doc.field2 = "I am 23 characters long";
+    doc.field3 = "I am 23 characters long";
+    doc.field4 = "I am 23 characters long";
+    doc.thumb = new require('mongodb').Binary(buffer);
+    
+    coll.insert(doc, function(err, result) {});
+    syncPayload.modified.push({
+      id : "lowladb.bin_thumb$" + doc._id,
+      version : "1",
+      clientNs : "lowladb.bin_thumb"
+    });
+  }
+  syncNotifier(syncPayload);
+}
+
+var createBin1mb = function(coll) {
+  var fs = require('fs');
+  
+  var syncNotifier = app_bin_1mb.get('lowlaConfig').syncNotifier;
+  var syncPayload = {modified: [], deleted: []};
+  var buffer = fs.readFileSync('1mb.png');
+  
+  for (i = 0 ; i < 100 ; ++i) {
+    var doc = {};
+    doc._id = i.toString();
+    doc.id = i.toString();
+    doc.field1 = "I am 23 characters long";
+    doc.field2 = "I am 23 characters long";
+    doc.field3 = "I am 23 characters long";
+    doc.field4 = "I am 23 characters long";
+    doc.image = new require('mongodb').Binary(buffer);
+    
+    coll.insert(doc, function(err, result) {});
+    syncPayload.modified.push({
+      id : "lowladb.bin_1mb$" + doc._id,
+      version : "1",
+      clientNs : "lowladb.bin_1mb"
+    });
+  }
+  syncNotifier(syncPayload);
+}
+
 mongoClient.connect('mongodb://127.0.0.1/lowladb', function(err, db) {
     if (err) {
       debug(err);
       process.exit(1);
     }
     mongoDb = db;
-    var coll = db.collection('no_bin_data');
-    coll.count(function(err, count) {
+    var coll_no_bin_data = db.collection('no_bin_data');
+    coll_no_bin_data.count(function(err, count) {
       if (count && 0 != count && 10000 != count) {
-        coll.remove(function(err, docs) {
-          createNoBinData(coll);
+        coll_no_bin_data.remove(function(err, docs) {
+          createNoBinData(coll_no_bin_data);
         });
       }
       else if (10000 != count) {
-         createNoBinData(coll);
+         createNoBinData(coll_no_bin_data);
+      }
+    });
+    var coll_bin_thumb = db.collection('bin_thumb');
+    coll_bin_thumb.count(function(err, count) {
+      if (count && 0 != count && 1000 != count) {
+        coll_bin_thumb.remove(function(err, docs) {
+          createBinThumb(coll_bin_thumb);
+        });
+      }
+      else if (1000 != count) {
+        createBinThumb(coll_bin_thumb);
+      }
+    });
+    var coll_bin_1mb = db.collection('bin_1mb');
+    coll_bin_1mb.count(function(err, count) {
+      if (count && 0 != count && 100 != count) {
+        coll_bin_1mb.remove(function(err, docs) {
+          createBin1mb(coll_bin_1mb);
+        });
+      }
+      else if (100 != count) {
+        createBin1mb(coll_bin_1mb);
       }
     });
 });
 
-app.set('port', process.env.PORT || 3000);
+app_no_bin_data.set('port', 3000);
+app_bin_thumb.set('port', 3001);
+app_bin_1mb.set('port', 3002);
 
-var server = app.listen(app.get('port'), function() {
-  debug('Express server listening on port ' + server.address().port);
+var server_no_bin_data = app_no_bin_data.listen(app_no_bin_data.get('port'), function() {
+  dump.run( {server: 'http://localhost:3000', sequence: 0, file: 'client/data/no_bin_data-dump.json'});
+  debug('Express server listening on port ' + server_no_bin_data.address().port);
+});
+
+var server_bin_thumb = app_bin_thumb.listen(app_bin_thumb.get('port'), function() {
+  dump.run( {server: 'http://localhost:3001', sequence: 0, file: 'client/data/bin_thumb-dump.json'});
+  debug('Express server listening on port ' + server_bin_thumb.address().port);
+});
+
+var server_bin_1mb = app_bin_1mb.listen(app_bin_1mb.get('port'), function() {
+  dump.run( {server: 'http://localhost:3002', sequence: 0, file: 'client/data/bin_1mb-dump.json'});
+  debug('Express server listening on port ' + server_bin_1mb.address().port);
 });
